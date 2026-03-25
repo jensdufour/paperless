@@ -210,7 +210,7 @@ The install script will write this to `paperless.conf`. If you already ran the i
 
 ```bash
 echo 'PAPERLESS_URL=https://paperless.yourdomain.com' >> /opt/paperless/paperless.conf
-systemctl restart paperless-web paperless-consumer paperless-scheduler
+systemctl restart paperless-webserver paperless-consumer paperless-scheduler
 ```
 
 This sets Django's `CSRF_TRUSTED_ORIGINS` and `ALLOWED_HOSTS`, which fixes the "CSRF verification failed" error.

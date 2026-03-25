@@ -149,7 +149,7 @@ if [ -n "${PAPERLESS_URL:-}" ]; then
         echo "PAPERLESS_URL=${PAPERLESS_URL}" >> "$PAPERLESS_CONF"
     fi
     log "Set PAPERLESS_URL=${PAPERLESS_URL} in paperless.conf"
-    systemctl restart paperless-web paperless-consumer paperless-scheduler 2>/dev/null || true
+    systemctl restart paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
 fi
 
 # ---- Step 9: Run initial sync ----
