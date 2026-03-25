@@ -92,7 +92,7 @@ done
 
 # ---- Step 7: Stop Paperless ----
 log "Stopping Paperless services..."
-systemctl stop paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
+systemctl stop paperless-webserver paperless-consumer paperless-scheduler paperless-task-queue 2>/dev/null || true
 
 # ---- Step 8: Restore PostgreSQL database ----
 log "Restoring PostgreSQL database..."
@@ -117,7 +117,7 @@ chown -R paperless:paperless "$ORIGINALS_DIR"
 
 # ---- Step 10: Start Paperless and rebuild index ----
 log "Starting Paperless services..."
-systemctl start paperless-webserver paperless-consumer paperless-scheduler
+systemctl start paperless-webserver paperless-consumer paperless-scheduler paperless-task-queue
 sleep 10
 
 log "Rebuilding search index..."

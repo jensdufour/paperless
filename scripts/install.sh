@@ -19,6 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="${PROJECT_DIR}/.env"
 PAPERLESS_CONF="/opt/paperless/paperless.conf"
+PAPERLESS_SERVICES="paperless-webserver paperless-consumer paperless-scheduler paperless-task-queue"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -145,7 +146,7 @@ fi
 
 # Restart Paperless to pick up config changes
 log "Restarting Paperless services..."
-systemctl restart paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
+systemctl restart $PAPERLESS_SERVICES 2>/dev/null || true
 sleep 5
 # ---- Step 4: Install rclone ----
 if ! command -v rclone &>/dev/null; then
