@@ -74,6 +74,7 @@ set_paperless_conf "PAPERLESS_CONSUMPTION_DIR" "/opt/paperless_data/consume"
 set_paperless_conf "PAPERLESS_OCR_LANGUAGE" "$OCR_LANG"
 set_paperless_conf "PAPERLESS_CONSUMER_RECURSIVE" "true"
 set_paperless_conf "PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS" "true"
+set_paperless_conf "PAPERLESS_CONSUMER_DELETE_DUPLICATES" "true"
 
 if [ -n "${PAPERLESS_FILENAME_FORMAT:-}" ]; then
     set_paperless_conf "PAPERLESS_FILENAME_FORMAT" "$PAPERLESS_FILENAME_FORMAT"

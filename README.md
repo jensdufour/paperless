@@ -274,6 +274,7 @@ The install script automatically configures `/opt/paperless/paperless.conf` with
 | `PAPERLESS_FILENAME_FORMAT` | From `.env` | `.env` |
 | `PAPERLESS_CONSUMER_RECURSIVE` | `true` | Hardcoded |
 | `PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS` | `true` | Hardcoded |
+| `PAPERLESS_CONSUMER_DELETE_DUPLICATES` | `true` | Hardcoded |
 | `PAPERLESS_URL` | From `.env` (if set) | `.env` |
 | `PAPERLESS_APPS` | OIDC provider (if PocketID configured) | `.env` |
 | `PAPERLESS_SOCIALACCOUNT_PROVIDERS` | PocketID OIDC config (if configured) | `.env` |
