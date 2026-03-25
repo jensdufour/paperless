@@ -1,0 +1,34 @@
+# =============================================================================
+# Paperless NGX - Recommended Configuration
+# =============================================================================
+# These settings are applied by install.sh on top of the community script
+# defaults. The community script already provides: PAPERLESS_DBHOST,
+# PAPERLESS_DBPASS, PAPERLESS_SECRET_KEY, PAPERLESS_DATA_DIR,
+# PAPERLESS_MEDIA_ROOT, etc.
+#
+# This file is a REFERENCE. Do not copy it directly over the existing
+# paperless.conf - use install.sh which merges these settings safely.
+# =============================================================================
+
+# ---- Paths ----
+# Ensure the consumer watches the correct directory
+PAPERLESS_CONSUMPTION_DIR=/opt/paperless_data/consume
+
+# ---- OCR ----
+# Language for OCR processing (install matching tesseract-ocr-<lang> package)
+# Common codes: eng, nld, fra, deu, spa
+# Multiple languages: eng+nld
+PAPERLESS_OCR_LANGUAGE=nld
+
+# ---- Document Organization ----
+# Filename format using Jinja2 syntax (NOT the old {var} syntax)
+PAPERLESS_FILENAME_FORMAT={{ created_year }}/{{ correspondent }}/{{ title }}
+
+# ---- Consumer ----
+# Process files in subdirectories of the consume folder
+PAPERLESS_CONSUMER_RECURSIVE=true
+# Use subdirectory names as tags
+PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS=true
+
+# ---- Reverse Proxy (uncomment if using Traefik/nginx/etc.) ----
+# PAPERLESS_URL=https://paperless.yourdomain.com

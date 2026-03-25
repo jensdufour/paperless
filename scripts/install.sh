@@ -5,9 +5,11 @@ set -euo pipefail
 # Paperless NGX Sync + Scanner Setup Script (Proxmox LXC)
 #
 # Run this inside the Paperless NGX LXC container to set up:
-#   1. rclone for OneDrive sync
-#   2. vsftpd for Canon ImageRunner 1133a scanning
-#   3. Cron jobs for periodic sync and backup
+#   1. OCR language support
+#   2. Paperless configuration (consumer, filename format, OCR, reverse proxy)
+#   3. rclone for OneDrive sync
+#   4. vsftpd for Canon ImageRunner 1133a scanning
+#   5. Cron jobs for periodic sync and backup
 #
 # Prerequisites:
 #   - Paperless NGX installed via https://community-scripts.org/scripts/paperless-ngx
@@ -16,6 +18,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 ENV_FILE="${PROJECT_DIR}/.env"
+PAPERLESS_CONF="/opt/paperless/paperless.conf"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
@@ -37,7 +40,55 @@ set -a
 source "$ENV_FILE"
 set +a
 
-# ---- Step 1: Install rclone ----
+# ---- Helper: set or update a value in paperless.conf ----
+set_paperless_conf() {
+    local key="$1"
+    local value="$2"
+    if grep -q "^${key}=" "$PAPERLESS_CONF" 2>/dev/null; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$PAPERLESS_CONF"
+    else
+        echo "${key}=${value}" >> "$PAPERLESS_CONF"
+    fi
+}
+
+# ---- Step 1: Install OCR language pack ----
+OCR_LANG="${PAPERLESS_OCR_LANGUAGE:-nld}"
+# Convert paperless OCR language to tesseract package name (e.g. nld -> tesseract-ocr-nld)
+# Handle multi-language (eng+nld) by installing each
+log "Installing OCR language packages..."
+IFS='+' read -ra LANGS <<< "$OCR_LANG"
+for lang in "${LANGS[@]}"; do
+    pkg="tesseract-ocr-${lang}"
+    if dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+        log "  $pkg already installed."
+    else
+        log "  Installing $pkg..."
+        apt-get update -qq
+        apt-get install -y -qq "$pkg"
+    fi
+done
+
+# ---- Step 2: Configure Paperless ----
+log "Configuring Paperless (paperless.conf)..."
+set_paperless_conf "PAPERLESS_CONSUMPTION_DIR" "/opt/paperless_data/consume"
+set_paperless_conf "PAPERLESS_OCR_LANGUAGE" "$OCR_LANG"
+set_paperless_conf "PAPERLESS_CONSUMER_RECURSIVE" "true"
+set_paperless_conf "PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS" "true"
+
+if [ -n "${PAPERLESS_FILENAME_FORMAT:-}" ]; then
+    set_paperless_conf "PAPERLESS_FILENAME_FORMAT" "$PAPERLESS_FILENAME_FORMAT"
+fi
+
+if [ -n "${PAPERLESS_URL:-}" ]; then
+    set_paperless_conf "PAPERLESS_URL" "$PAPERLESS_URL"
+    log "Set PAPERLESS_URL=${PAPERLESS_URL}"
+fi
+
+# Restart Paperless to pick up config changes
+log "Restarting Paperless services..."
+systemctl restart paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
+sleep 5
+# ---- Step 3: Install rclone ----
 if ! command -v rclone &>/dev/null; then
     log "Installing rclone..."
     curl -fsSL https://rclone.org/install.sh | bash
@@ -45,7 +96,7 @@ else
     log "rclone already installed: $(rclone version --check | head -1)"
 fi
 
-# ---- Step 2: Configure rclone (if not already done) ----
+# ---- Step 4: Configure rclone (if not already done) ----
 if [ ! -f /root/.config/rclone/rclone.conf ] || ! rclone listremotes | grep -q "^${RCLONE_REMOTE}:$"; then
     log "rclone remote '${RCLONE_REMOTE}' not found. Starting interactive config..."
     echo ""
@@ -60,7 +111,7 @@ if [ ! -f /root/.config/rclone/rclone.conf ] || ! rclone listremotes | grep -q "
     rclone config
 fi
 
-# ---- Step 3: Verify OneDrive connection ----
+# ---- Step 5: Verify OneDrive connection ----
 log "Testing OneDrive connection..."
 if rclone lsd "${RCLONE_REMOTE}:" &>/dev/null; then
     log "OneDrive connection successful."
@@ -69,14 +120,14 @@ else
     exit 1
 fi
 
-# ---- Step 4: Create OneDrive folders ----
+# ---- Step 6: Create OneDrive folders ----
 log "Creating OneDrive folder structure..."
 rclone mkdir "${RCLONE_REMOTE}:${ONEDRIVE_ARCHIVE}"
 rclone mkdir "${RCLONE_REMOTE}:${ONEDRIVE_SCAN}"
 rclone mkdir "${RCLONE_REMOTE}:${ONEDRIVE_BACKUPS}"
 log "Created: ${ONEDRIVE_ARCHIVE}, ${ONEDRIVE_SCAN}, ${ONEDRIVE_BACKUPS}"
 
-# ---- Step 5: Install and configure vsftpd ----
+# ---- Step 7: Install and configure vsftpd ----
 log "Installing vsftpd..."
 apt-get update -qq
 apt-get install -y -qq vsftpd
@@ -120,12 +171,12 @@ systemctl enable vsftpd
 systemctl restart vsftpd
 log "vsftpd configured and started."
 
-# ---- Step 6: Make scripts executable ----
+# ---- Step 8: Make scripts executable ----
 chmod +x "${SCRIPT_DIR}/sync.sh"
 chmod +x "${SCRIPT_DIR}/backup.sh"
 chmod +x "${SCRIPT_DIR}/restore.sh"
 
-# ---- Step 7: Set up cron jobs ----
+# ---- Step 9: Set up cron jobs ----
 log "Setting up cron jobs..."
 
 CRON_FILE="/etc/cron.d/paperless-sync"
@@ -140,19 +191,7 @@ chmod 644 "$CRON_FILE"
 
 log "Cron jobs installed."
 
-# ---- Step 8: Configure reverse proxy URL (if set) ----
-if [ -n "${PAPERLESS_URL:-}" ]; then
-    PAPERLESS_CONF="/opt/paperless/paperless.conf"
-    if grep -q "^PAPERLESS_URL=" "$PAPERLESS_CONF" 2>/dev/null; then
-        sed -i "s|^PAPERLESS_URL=.*|PAPERLESS_URL=${PAPERLESS_URL}|" "$PAPERLESS_CONF"
-    else
-        echo "PAPERLESS_URL=${PAPERLESS_URL}" >> "$PAPERLESS_CONF"
-    fi
-    log "Set PAPERLESS_URL=${PAPERLESS_URL} in paperless.conf"
-    systemctl restart paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
-fi
-
-# ---- Step 9: Run initial sync ----
+# ---- Step 10: Run initial sync ----
 log "Running initial sync..."
 "${SCRIPT_DIR}/sync.sh" || true
 

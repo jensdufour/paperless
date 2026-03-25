@@ -6,7 +6,8 @@ set -euo pipefail
 #
 # Creates a lightweight backup containing only what the sync does NOT cover:
 #   - PostgreSQL database dump (metadata, tags, correspondents, rules, etc.)
-#   - rclone config (OneDrive auth)
+#   - Paperless configuration (paperless.conf)
+#   - rclone configuration (OneDrive auth)
 #   - Scripts and .env
 #
 # Document files are NOT included since they are already synced to OneDrive
@@ -45,6 +46,8 @@ tar -czf "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" \
     -C "$PROJECT_DIR" \
     .env \
     scripts/ \
+    -C /opt/paperless \
+    paperless.conf \
     -C /root \
     .config/rclone/ \
     -C "$BACKUP_DIR" \

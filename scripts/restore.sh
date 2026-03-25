@@ -5,8 +5,8 @@ set -euo pipefail
 # Paperless NGX Restore Script (Proxmox LXC)
 #
 # Restores a Paperless NGX installation from a backup archive.
-# The backup contains only the database dump, config, and scripts.
-# Document files are pulled from OneDrive Archive (where sync put them).
+# The backup contains the database dump, paperless.conf, rclone config,
+# scripts, and .env. Document files are pulled from OneDrive Archive.
 #
 # Run this inside a fresh Proxmox LXC created with the community script.
 #
@@ -30,6 +30,11 @@ BACKUP_FILE="$1"
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
 }
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Error: This script must be run as root."
+    exit 1
+fi
 
 if [ ! -f "$BACKUP_FILE" ]; then
     echo "Error: Backup file not found: $BACKUP_FILE"
@@ -63,11 +68,33 @@ cp "$RESTORE_DIR/.env" "$SCRIPTS_TARGET/" 2>/dev/null || true
 cp -r "$RESTORE_DIR/scripts/"* "$SCRIPTS_TARGET/scripts/" 2>/dev/null || true
 chmod +x "$SCRIPTS_TARGET/scripts/"*.sh
 
-# ---- Step 5: Stop Paperless ----
-log "Stopping Paperless service..."
+# ---- Step 5: Restore paperless.conf ----
+log "Restoring Paperless configuration..."
+if [ -f "$RESTORE_DIR/paperless.conf" ]; then
+    cp "$RESTORE_DIR/paperless.conf" /opt/paperless/paperless.conf
+    chown paperless:paperless /opt/paperless/paperless.conf
+    log "paperless.conf restored."
+else
+    log "Warning: No paperless.conf in backup. Running install.sh will configure it."
+fi
+
+# ---- Step 6: Install OCR language packages ----
+log "Installing OCR language packages..."
+OCR_LANG="${PAPERLESS_OCR_LANGUAGE:-nld}"
+IFS='+' read -ra LANGS <<< "$OCR_LANG"
+for lang in "${LANGS[@]}"; do
+    pkg="tesseract-ocr-${lang}"
+    if ! dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"; then
+        apt-get update -qq
+        apt-get install -y -qq "$pkg"
+    fi
+done
+
+# ---- Step 7: Stop Paperless ----
+log "Stopping Paperless services..."
 systemctl stop paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
 
-# ---- Step 6: Restore PostgreSQL database ----
+# ---- Step 8: Restore PostgreSQL database ----
 log "Restoring PostgreSQL database..."
 if [ -f "$RESTORE_DIR/db_backup.dump" ]; then
     sudo -u postgres pg_restore \
@@ -77,7 +104,7 @@ if [ -f "$RESTORE_DIR/db_backup.dump" ]; then
         "$RESTORE_DIR/db_backup.dump" || true
 fi
 
-# ---- Step 7: Pull document files from OneDrive Archive ----
+# ---- Step 9: Pull document files from OneDrive Archive ----
 log "Downloading documents from OneDrive Archive..."
 ORIGINALS_DIR="${PAPERLESS_MEDIA:-/opt/paperless_data/media}/documents/originals"
 mkdir -p "$ORIGINALS_DIR"
@@ -88,7 +115,7 @@ rclone copy \
     --transfers 8
 chown -R paperless:paperless "$ORIGINALS_DIR"
 
-# ---- Step 8: Start Paperless and rebuild index ----
+# ---- Step 10: Start Paperless and rebuild index ----
 log "Starting Paperless services..."
 systemctl start paperless-webserver paperless-consumer paperless-scheduler
 sleep 10
@@ -97,9 +124,14 @@ log "Rebuilding search index..."
 cd /opt/paperless/src
 /opt/paperless/.venv/bin/python3 manage.py document_index reindex
 
-# ---- Step 9: Cleanup ----
+# ---- Step 11: Set up cron jobs and vsftpd ----
+log "Running install script for cron jobs, vsftpd, and remaining config..."
+if [ -f "$SCRIPTS_TARGET/scripts/install.sh" ]; then
+    bash "$SCRIPTS_TARGET/scripts/install.sh"
+fi
+
+# ---- Step 12: Cleanup ----
 rm -rf "$RESTORE_DIR"
 
 log "Restore complete!"
 log "Paperless NGX should be available at the configured URL."
-log "Run the install script to set up sync cron and FTP if needed."
