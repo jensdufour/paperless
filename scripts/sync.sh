@@ -48,14 +48,18 @@ trap 'rm -f "$LOCKFILE"' EXIT
 # ---- Step 1: Upload processed documents to OneDrive Archive ----
 # One-way sync: Paperless originals -> OneDrive Documents/Paperless/Archive
 # This makes all processed/renamed documents available in OneDrive
-log "Syncing processed documents to OneDrive Archive..."
-rclone sync \
-    "$ORIGINALS_DIR" \
-    "$ONEDRIVE_ARCHIVE" \
-    --log-level INFO \
-    --checkers 4 \
-    --transfers 4 \
-    --ignore-existing
+if [ -d "$ORIGINALS_DIR" ]; then
+    log "Syncing processed documents to OneDrive Archive..."
+    rclone sync \
+        "$ORIGINALS_DIR" \
+        "$ONEDRIVE_ARCHIVE" \
+        --log-level INFO \
+        --checkers 4 \
+        --transfers 4 \
+        --ignore-existing
+else
+    log "No originals directory yet ($ORIGINALS_DIR), skipping upload."
+fi
 
 # ---- Step 2: Download phone scans from OneDrive Scan folder ----
 # One-way move: OneDrive Documents/Paperless/Scan -> Paperless consume folder
