@@ -106,33 +106,85 @@ fi
 if [ "${PAPERLESS_TIKA_ENABLED:-false}" = "true" ]; then
     log "Setting up Tika and Gotenberg for Office document support..."
 
-    # Install Docker if not present
-    if ! command -v docker &>/dev/null; then
-        log "Installing Docker..."
-        curl -fsSL https://get.docker.com | sh
-        systemctl enable docker
-        systemctl start docker
+    # ---- Tika (Java JAR as systemd service) ----
+    TIKA_VERSION="3.1.0"
+    TIKA_JAR="/opt/tika/tika-server-standard.jar"
+
+    if [ ! -f "$TIKA_JAR" ]; then
+        log "Installing Apache Tika ${TIKA_VERSION}..."
+        apt-get update -qq
+        apt-get install -y -qq default-jre-headless
+        mkdir -p /opt/tika
+        curl -fsSL -o "$TIKA_JAR" \
+            "https://dlcdn.apache.org/tika/${TIKA_VERSION}/tika-server-standard-${TIKA_VERSION}.jar"
     else
-        log "Docker already installed."
+        log "Tika JAR already present."
     fi
 
-    # Start Gotenberg container
-    if docker ps -a --format '{{.Names}}' | grep -q '^gotenberg$'; then
-        log "Gotenberg container already exists, restarting..."
-        docker restart gotenberg
+    # Create tika systemd service
+    cat > /etc/systemd/system/tika.service << 'EOF'
+[Unit]
+Description=Apache Tika Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/java -jar /opt/tika/tika-server-standard.jar --host 0.0.0.0 --port 9998
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable tika
+    systemctl restart tika
+    log "Tika service started on port 9998."
+
+    # ---- Gotenberg (binary + LibreOffice + Chromium) ----
+    GOTENBERG_VERSION="8.16.0"
+    GOTENBERG_BIN="/opt/gotenberg/gotenberg"
+
+    if [ ! -f "$GOTENBERG_BIN" ]; then
+        log "Installing Gotenberg ${GOTENBERG_VERSION}..."
+        apt-get update -qq
+        apt-get install -y -qq libreoffice-writer libreoffice-calc libreoffice-impress \
+            chromium fonts-liberation fonts-dejavu
+        mkdir -p /opt/gotenberg
+        ARCH=$(dpkg --print-architecture)
+        curl -fsSL -o /tmp/gotenberg.tar.gz \
+            "https://github.com/gotenberg/gotenberg/releases/download/v${GOTENBERG_VERSION}/gotenberg_${GOTENBERG_VERSION}_linux_${ARCH}.tar.gz"
+        tar -xzf /tmp/gotenberg.tar.gz -C /opt/gotenberg/
+        rm -f /tmp/gotenberg.tar.gz
+        chmod +x "$GOTENBERG_BIN"
     else
-        log "Starting Gotenberg container..."
-        docker run -d --name gotenberg --restart always -p 3000:3000 gotenberg/gotenberg:8
+        log "Gotenberg binary already present."
     fi
 
-    # Start Tika container
-    if docker ps -a --format '{{.Names}}' | grep -q '^tika$'; then
-        log "Tika container already exists, restarting..."
-        docker restart tika
-    else
-        log "Starting Tika container..."
-        docker run -d --name tika --restart always -p 9998:9998 apache/tika:latest
-    fi
+    # Find chromium path (varies by distro)
+    CHROMIUM_PATH=$(command -v chromium || command -v chromium-browser || echo "/usr/bin/chromium")
+
+    # Create gotenberg systemd service
+    cat > /etc/systemd/system/gotenberg.service << EOF
+[Unit]
+Description=Gotenberg Document Conversion API
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/opt/gotenberg/gotenberg --api-port 3000 --chromium-browser-path ${CHROMIUM_PATH} --libreoffice-auto-start
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable gotenberg
+    systemctl restart gotenberg
+    log "Gotenberg service started on port 3000."
 
     # Configure Paperless to use Tika + Gotenberg
     set_paperless_conf "PAPERLESS_TIKA_ENABLED" "true"

@@ -60,7 +60,7 @@ bash scripts/install.sh
 This will:
 - Install OCR language packages (e.g. `tesseract-ocr-nld`)
 - Configure Paperless (`paperless.conf`) with OCR language, filename format, consumer settings, and reverse proxy URL
-- Install Docker, Tika, and Gotenberg for Office document support (if enabled in `.env`)
+- Install Tika and Gotenberg for Office document support (if enabled in `.env`)
 - Install rclone and walk you through OneDrive authorization
 - Create the OneDrive folder structure (Documents/Paperless/Archive, Documents/Paperless/Scan, Documents/Paperless/Backups)
 - Set up cron jobs for sync (every 5 min) and backup (weekly)
@@ -91,7 +91,7 @@ By default Paperless only handles PDFs and images. To also process Office docume
 
 This is enabled by default in `.env` (`PAPERLESS_TIKA_ENABLED=true`). Set it to `false` before running the install script if you only need PDF/image support.
 
-The containers run with `--restart always`, so they survive reboots. They add roughly 400MB of memory usage.
+Both run as native systemd services (`tika.service` and `gotenberg.service`), consistent with the rest of the Proxmox LXC setup.
 
 ## OneDrive Folder Structure
 
@@ -325,11 +325,12 @@ sort /opt/paperless/paperless.conf | uniq -d
 ### Office documents not working
 
 ```bash
-# Check Tika and Gotenberg containers are running
-docker ps --format 'table {{.Names}}\t{{.Status}}'
+# Check Tika and Gotenberg services
+systemctl status tika
+systemctl status gotenberg
 
-# Restart containers if needed
-docker restart tika gotenberg
+# Restart if needed
+systemctl restart tika gotenberg
 
 # Test Tika endpoint
 curl -s http://localhost:9998/version
@@ -337,7 +338,7 @@ curl -s http://localhost:9998/version
 # Test Gotenberg endpoint
 curl -s http://localhost:3000/health
 
-# Check container logs
-docker logs tika --tail 20
-docker logs gotenberg --tail 20
+# Check service logs
+journalctl -u tika --no-pager -n 20
+journalctl -u gotenberg --no-pager -n 20
 ```
