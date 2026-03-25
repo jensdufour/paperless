@@ -30,5 +30,10 @@ PAPERLESS_CONSUMER_RECURSIVE=true
 # Use subdirectory names as tags
 PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS=true
 
+# ---- SSO / OpenID Connect (e.g. PocketID) ----
+# PAPERLESS_APPS=allauth.socialaccount.providers.openid_connect
+# PAPERLESS_SOCIALACCOUNT_PROVIDERS={"openid_connect":{"APPS":[{"provider_id":"pocketid","name":"PocketID","client_id":"YOUR_CLIENT_ID","secret":"YOUR_CLIENT_SECRET","settings":{"server_url":"https://pocketid.yourdomain.com/.well-known/openid-configuration"}}]}}
+# PAPERLESS_SOCIAL_AUTO_SIGNUP=true
+
 # ---- Reverse Proxy (uncomment if using Traefik/nginx/etc.) ----
 # PAPERLESS_URL=https://paperless.yourdomain.com

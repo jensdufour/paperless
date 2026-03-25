@@ -247,6 +247,22 @@ systemctl restart paperless-webserver paperless-consumer paperless-scheduler
 
 This sets Django's `CSRF_TRUSTED_ORIGINS` and `ALLOWED_HOSTS`, which fixes the "CSRF verification failed" error.
 
+## Single Sign-On (PocketID / OIDC)
+
+Paperless can authenticate users via OpenID Connect. To use [PocketID](https://github.com/pocket-id/pocket-id):
+
+1. In PocketID, create an OIDC client with the callback URL:
+   ```
+   https://paperless.yourdomain.com/accounts/openid_connect/pocketid/login/callback/
+   ```
+2. Set the following in your `.env`:
+   ```bash
+   POCKETID_URL=https://pocketid.yourdomain.com
+   POCKETID_CLIENT_ID=your-client-id
+   POCKETID_CLIENT_SECRET=your-client-secret
+   ```
+3. Run the install script (or re-run it). The login page will show a "PocketID" button.
+
 ## Paperless Configuration
 
 The install script automatically configures `/opt/paperless/paperless.conf` with the following settings:
@@ -259,6 +275,9 @@ The install script automatically configures `/opt/paperless/paperless.conf` with
 | `PAPERLESS_CONSUMER_RECURSIVE` | `true` | Hardcoded |
 | `PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS` | `true` | Hardcoded |
 | `PAPERLESS_URL` | From `.env` (if set) | `.env` |
+| `PAPERLESS_APPS` | OIDC provider (if PocketID configured) | `.env` |
+| `PAPERLESS_SOCIALACCOUNT_PROVIDERS` | PocketID OIDC config (if configured) | `.env` |
+| `PAPERLESS_SOCIAL_AUTO_SIGNUP` | `true` (if PocketID configured) | `.env` |
 
 See [paperless.conf.example](paperless.conf.example) for a reference of all recommended settings.
 

@@ -84,6 +84,16 @@ if [ -n "${PAPERLESS_URL:-}" ]; then
     log "Set PAPERLESS_URL=${PAPERLESS_URL}"
 fi
 
+# ---- PocketID OIDC (if configured) ----
+if [ -n "${POCKETID_CLIENT_ID:-}" ] && [ -n "${POCKETID_CLIENT_SECRET:-}" ] && [ -n "${POCKETID_URL:-}" ]; then
+    log "Configuring PocketID OIDC..."
+    set_paperless_conf "PAPERLESS_APPS" "allauth.socialaccount.providers.openid_connect"
+    OIDC_JSON="{\"openid_connect\":{\"APPS\":[{\"provider_id\":\"pocketid\",\"name\":\"PocketID\",\"client_id\":\"${POCKETID_CLIENT_ID}\",\"secret\":\"${POCKETID_CLIENT_SECRET}\",\"settings\":{\"server_url\":\"${POCKETID_URL}/.well-known/openid-configuration\"}}]}}"
+    set_paperless_conf "PAPERLESS_SOCIALACCOUNT_PROVIDERS" "$OIDC_JSON"
+    set_paperless_conf "PAPERLESS_SOCIAL_AUTO_SIGNUP" "${PAPERLESS_SOCIAL_AUTO_SIGNUP:-true}"
+    log "PocketID OIDC configured (${POCKETID_URL})"
+fi
+
 # Restart Paperless to pick up config changes
 log "Restarting Paperless services..."
 systemctl restart paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
