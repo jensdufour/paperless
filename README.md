@@ -31,6 +31,7 @@ OneDrive Mobile App
 ## Prerequisites
 
 - Proxmox VE with a Paperless NGX LXC created via the [community script](https://community-scripts.org/scripts/paperless-ngx)
+- LXC nesting enabled if using Tika/Gotenberg (`pct set <CTID> -features nesting=1` on the Proxmox host)
 - A Microsoft account with OneDrive
 
 ## Quick Start
@@ -60,7 +61,7 @@ bash scripts/install.sh
 This will:
 - Install OCR language packages (e.g. `tesseract-ocr-nld`)
 - Configure Paperless (`paperless.conf`) with OCR language, filename format, consumer settings, and reverse proxy URL
-- Install Tika and Gotenberg for Office document support (if enabled in `.env`)
+- Install Tika and Gotenberg Docker containers for Office document support (if enabled in `.env`)
 - Install rclone and walk you through OneDrive authorization
 - Create the OneDrive folder structure (Documents/Paperless/Archive, Documents/Paperless/Scan, Documents/Paperless/Backups)
 - Set up cron jobs for sync (every 5 min) and backup (weekly)
@@ -91,7 +92,7 @@ By default Paperless only handles PDFs and images. To also process Office docume
 
 This is enabled by default in `.env` (`PAPERLESS_TIKA_ENABLED=true`). Set it to `false` before running the install script if you only need PDF/image support.
 
-Both run as native systemd services (`tika.service` and `gotenberg.service`), consistent with the rest of the Proxmox LXC setup.
+Both run as Docker containers with `--restart always` and ports bound to `127.0.0.1` only. Docker is installed automatically if not already present. The Proxmox LXC needs to have nesting enabled (`Features: nesting=1`) for Docker to work.
 
 ## OneDrive Folder Structure
 
@@ -325,12 +326,11 @@ sort /opt/paperless/paperless.conf | uniq -d
 ### Office documents not working
 
 ```bash
-# Check Tika and Gotenberg services
-systemctl status tika
-systemctl status gotenberg
+# Check containers are running
+docker ps --format 'table {{.Names}}\t{{.Status}}'
 
 # Restart if needed
-systemctl restart tika gotenberg
+docker restart tika gotenberg
 
 # Test Tika endpoint
 curl -s http://localhost:9998/version
@@ -338,7 +338,10 @@ curl -s http://localhost:9998/version
 # Test Gotenberg endpoint
 curl -s http://localhost:3000/health
 
-# Check service logs
-journalctl -u tika --no-pager -n 20
-journalctl -u gotenberg --no-pager -n 20
+# Check container logs
+docker logs tika --tail 20
+docker logs gotenberg --tail 20
+
+# If Docker won't start, ensure LXC nesting is enabled:
+# On Proxmox host: pct set <CTID> -features nesting=1
 ```
