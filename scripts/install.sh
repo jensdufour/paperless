@@ -7,8 +7,9 @@ set -euo pipefail
 # Run this inside the Paperless NGX LXC container to set up:
 #   1. OCR language support
 #   2. Paperless configuration (consumer, filename format, OCR, reverse proxy)
-#   3. rclone for OneDrive sync
-#   4. Cron jobs for periodic sync and backup
+#   3. Tika + Gotenberg for Office document support (if enabled)
+#   4. rclone for OneDrive sync
+#   5. Cron jobs for periodic sync and backup
 #
 # Prerequisites:
 #   - Paperless NGX installed via https://community-scripts.org/scripts/paperless-ngx
@@ -101,11 +102,52 @@ if [ -n "${POCKETID_CLIENT_ID:-}" ] && [ -n "${POCKETID_CLIENT_SECRET:-}" ] && [
     log "PocketID OIDC configured (${POCKETID_URL})"
 fi
 
+# ---- Step 3: Install Tika + Gotenberg (if enabled) ----
+if [ "${PAPERLESS_TIKA_ENABLED:-false}" = "true" ]; then
+    log "Setting up Tika and Gotenberg for Office document support..."
+
+    # Install Docker if not present
+    if ! command -v docker &>/dev/null; then
+        log "Installing Docker..."
+        curl -fsSL https://get.docker.com | sh
+        systemctl enable docker
+        systemctl start docker
+    else
+        log "Docker already installed."
+    fi
+
+    # Start Gotenberg container
+    if docker ps -a --format '{{.Names}}' | grep -q '^gotenberg$'; then
+        log "Gotenberg container already exists, restarting..."
+        docker restart gotenberg
+    else
+        log "Starting Gotenberg container..."
+        docker run -d --name gotenberg --restart always -p 3000:3000 gotenberg/gotenberg:8
+    fi
+
+    # Start Tika container
+    if docker ps -a --format '{{.Names}}' | grep -q '^tika$'; then
+        log "Tika container already exists, restarting..."
+        docker restart tika
+    else
+        log "Starting Tika container..."
+        docker run -d --name tika --restart always -p 9998:9998 apache/tika:latest
+    fi
+
+    # Configure Paperless to use Tika + Gotenberg
+    set_paperless_conf "PAPERLESS_TIKA_ENABLED" "true"
+    set_paperless_conf "PAPERLESS_TIKA_GOTENBERG_ENDPOINT" "http://localhost:3000"
+    set_paperless_conf "PAPERLESS_TIKA_ENDPOINT" "http://localhost:9998"
+    log "Tika and Gotenberg configured."
+else
+    log "Tika/Gotenberg disabled (PAPERLESS_TIKA_ENABLED!=true), skipping."
+fi
+
 # Restart Paperless to pick up config changes
 log "Restarting Paperless services..."
 systemctl restart paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
 sleep 5
-# ---- Step 3: Install rclone ----
+# ---- Step 4: Install rclone ----
 if ! command -v rclone &>/dev/null; then
     log "Installing rclone..."
     curl -fsSL https://rclone.org/install.sh | bash
@@ -113,7 +155,7 @@ else
     log "rclone already installed: $(rclone version --check | head -1)"
 fi
 
-# ---- Step 4: Configure rclone (if not already done) ----
+# ---- Step 5: Configure rclone (if not already done) ----
 if [ ! -f /root/.config/rclone/rclone.conf ] || ! rclone listremotes | grep -q "^${RCLONE_REMOTE}:$"; then
     log "rclone remote '${RCLONE_REMOTE}' not found. Starting interactive config..."
     echo ""
@@ -128,7 +170,7 @@ if [ ! -f /root/.config/rclone/rclone.conf ] || ! rclone listremotes | grep -q "
     rclone config
 fi
 
-# ---- Step 5: Verify OneDrive connection ----
+# ---- Step 6: Verify OneDrive connection ----
 log "Testing OneDrive connection..."
 if rclone lsd "${RCLONE_REMOTE}:" &>/dev/null; then
     log "OneDrive connection successful."
@@ -137,19 +179,19 @@ else
     exit 1
 fi
 
-# ---- Step 6: Create OneDrive folders ----
+# ---- Step 7: Create OneDrive folders ----
 log "Creating OneDrive folder structure..."
 rclone mkdir "${RCLONE_REMOTE}:${ONEDRIVE_ARCHIVE}"
 rclone mkdir "${RCLONE_REMOTE}:${ONEDRIVE_SCAN}"
 rclone mkdir "${RCLONE_REMOTE}:${ONEDRIVE_BACKUPS}"
 log "Created: ${ONEDRIVE_ARCHIVE}, ${ONEDRIVE_SCAN}, ${ONEDRIVE_BACKUPS}"
 
-# ---- Step 7: Make scripts executable ----
+# ---- Step 8: Make scripts executable ----
 chmod +x "${SCRIPT_DIR}/sync.sh"
 chmod +x "${SCRIPT_DIR}/backup.sh"
 chmod +x "${SCRIPT_DIR}/restore.sh"
 
-# ---- Step 8: Set up cron jobs ----
+# ---- Step 9: Set up cron jobs ----
 log "Setting up cron jobs..."
 
 CRON_FILE="/etc/cron.d/paperless-sync"
@@ -164,7 +206,7 @@ chmod 644 "$CRON_FILE"
 
 log "Cron jobs installed."
 
-# ---- Step 9: Run initial sync ----
+# ---- Step 10: Run initial sync ----
 log "Running initial sync..."
 "${SCRIPT_DIR}/sync.sh" || true
 

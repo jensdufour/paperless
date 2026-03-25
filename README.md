@@ -60,6 +60,7 @@ bash scripts/install.sh
 This will:
 - Install OCR language packages (e.g. `tesseract-ocr-nld`)
 - Configure Paperless (`paperless.conf`) with OCR language, filename format, consumer settings, and reverse proxy URL
+- Install Docker, Tika, and Gotenberg for Office document support (if enabled in `.env`)
 - Install rclone and walk you through OneDrive authorization
 - Create the OneDrive folder structure (Documents/Paperless/Archive, Documents/Paperless/Scan, Documents/Paperless/Backups)
 - Set up cron jobs for sync (every 5 min) and backup (weekly)
@@ -80,6 +81,17 @@ Since the LXC has no browser, the install script will prompt you to:
 4. Within 5 minutes, rclone moves the file into Paperless's consume folder
 5. Paperless processes, OCRs, renames, and organizes the document
 6. The processed document appears in **My Files > Documents > Paperless > Archive** on OneDrive
+
+## Office Document Support (Tika + Gotenberg)
+
+By default Paperless only handles PDFs and images. To also process Office documents (.docx, .xlsx, .pptx, .odt, .ods, etc.), the install script can set up **Apache Tika** and **Gotenberg** as Docker containers:
+
+- **Tika** extracts text from Office files (used for search and matching)
+- **Gotenberg** converts Office files to PDF (used for the archived version and thumbnails)
+
+This is enabled by default in `.env` (`PAPERLESS_TIKA_ENABLED=true`). Set it to `false` before running the install script if you only need PDF/image support.
+
+The containers run with `--restart always`, so they survive reboots. They add roughly 400MB of memory usage.
 
 ## OneDrive Folder Structure
 
@@ -244,6 +256,9 @@ The install script automatically configures `/opt/paperless/paperless.conf` with
 | `PAPERLESS_CONSUMER_RECURSIVE` | `true` | Hardcoded |
 | `PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS` | `true` | Hardcoded |
 | `PAPERLESS_CONSUMER_DELETE_DUPLICATES` | `true` | Hardcoded |
+| `PAPERLESS_TIKA_ENABLED` | From `.env` (default: `false`) | `.env` |
+| `PAPERLESS_TIKA_ENDPOINT` | `http://localhost:9998` (if Tika enabled) | Hardcoded |
+| `PAPERLESS_TIKA_GOTENBERG_ENDPOINT` | `http://localhost:3000` (if Tika enabled) | Hardcoded |
 | `PAPERLESS_URL` | From `.env` (if set) | `.env` |
 | `PAPERLESS_APPS` | OIDC provider (if PocketID configured) | `.env` |
 | `PAPERLESS_SOCIALACCOUNT_PROVIDERS` | PocketID OIDC config (if configured) | `.env` |
@@ -305,4 +320,24 @@ dpkg -l | grep tesseract-ocr
 
 # Verify paperless.conf has no duplicate entries
 sort /opt/paperless/paperless.conf | uniq -d
+```
+
+### Office documents not working
+
+```bash
+# Check Tika and Gotenberg containers are running
+docker ps --format 'table {{.Names}}\t{{.Status}}'
+
+# Restart containers if needed
+docker restart tika gotenberg
+
+# Test Tika endpoint
+curl -s http://localhost:9998/version
+
+# Test Gotenberg endpoint
+curl -s http://localhost:3000/health
+
+# Check container logs
+docker logs tika --tail 20
+docker logs gotenberg --tail 20
 ```

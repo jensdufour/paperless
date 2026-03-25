@@ -37,5 +37,11 @@ PAPERLESS_CONSUMER_DELETE_DUPLICATES=true
 # PAPERLESS_SOCIALACCOUNT_PROVIDERS={"openid_connect":{"APPS":[{"provider_id":"pocketid","name":"PocketID","client_id":"YOUR_CLIENT_ID","secret":"YOUR_CLIENT_SECRET","settings":{"server_url":"https://pocketid.yourdomain.com/.well-known/openid-configuration"}}]}}
 # PAPERLESS_SOCIAL_AUTO_SIGNUP=true
 
+# ---- Document Conversion (Tika + Gotenberg) ----
+# Enable to support Office documents (.docx, .xlsx, .odt, .pptx, etc.)
+PAPERLESS_TIKA_ENABLED=true
+PAPERLESS_TIKA_GOTENBERG_ENDPOINT=http://localhost:3000
+PAPERLESS_TIKA_ENDPOINT=http://localhost:9998
+
 # ---- Reverse Proxy (uncomment if using Traefik/nginx/etc.) ----
 # PAPERLESS_URL=https://paperless.yourdomain.com
