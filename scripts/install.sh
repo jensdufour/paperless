@@ -2,14 +2,13 @@
 set -euo pipefail
 
 # =============================================================================
-# Paperless NGX Sync + Scanner Setup Script (Proxmox LXC)
+# Paperless NGX Sync Setup Script (Proxmox LXC)
 #
 # Run this inside the Paperless NGX LXC container to set up:
 #   1. OCR language support
 #   2. Paperless configuration (consumer, filename format, OCR, reverse proxy)
 #   3. rclone for OneDrive sync
-#   4. vsftpd for Canon ImageRunner 1133a scanning
-#   5. Cron jobs for periodic sync and backup
+#   4. Cron jobs for periodic sync and backup
 #
 # Prerequisites:
 #   - Paperless NGX installed via https://community-scripts.org/scripts/paperless-ngx
@@ -145,56 +144,12 @@ rclone mkdir "${RCLONE_REMOTE}:${ONEDRIVE_SCAN}"
 rclone mkdir "${RCLONE_REMOTE}:${ONEDRIVE_BACKUPS}"
 log "Created: ${ONEDRIVE_ARCHIVE}, ${ONEDRIVE_SCAN}, ${ONEDRIVE_BACKUPS}"
 
-# ---- Step 7: Install and configure vsftpd ----
-log "Installing vsftpd..."
-apt-get update -qq
-apt-get install -y -qq vsftpd
-
-# Create FTP user
-if ! id "$FTP_USER" &>/dev/null; then
-    log "Creating FTP user: $FTP_USER"
-    useradd -m -d "/home/${FTP_USER}" -s /usr/sbin/nologin "$FTP_USER"
-fi
-echo "${FTP_USER}:${FTP_PASSWORD}" | chpasswd
-
-# Point FTP home to Paperless consume directory
-mkdir -p "${PAPERLESS_CONSUME}"
-chown "${FTP_USER}:${FTP_USER}" "${PAPERLESS_CONSUME}"
-
-# Configure vsftpd
-cat > /etc/vsftpd.conf << 'VSFTPD_EOF'
-listen=YES
-listen_ipv6=NO
-anonymous_enable=NO
-local_enable=YES
-write_enable=YES
-local_umask=022
-chroot_local_user=YES
-allow_writeable_chroot=YES
-pasv_enable=YES
-pasv_min_port=21100
-pasv_max_port=21110
-userlist_enable=YES
-userlist_deny=NO
-userlist_file=/etc/vsftpd.userlist
-VSFTPD_EOF
-
-# Set the FTP user's home to the consume directory
-usermod -d "${PAPERLESS_CONSUME}" "$FTP_USER"
-
-# Allow only the scanner user
-echo "$FTP_USER" > /etc/vsftpd.userlist
-
-systemctl enable vsftpd
-systemctl restart vsftpd
-log "vsftpd configured and started."
-
-# ---- Step 8: Make scripts executable ----
+# ---- Step 7: Make scripts executable ----
 chmod +x "${SCRIPT_DIR}/sync.sh"
 chmod +x "${SCRIPT_DIR}/backup.sh"
 chmod +x "${SCRIPT_DIR}/restore.sh"
 
-# ---- Step 9: Set up cron jobs ----
+# ---- Step 8: Set up cron jobs ----
 log "Setting up cron jobs..."
 
 CRON_FILE="/etc/cron.d/paperless-sync"
@@ -209,7 +164,7 @@ chmod 644 "$CRON_FILE"
 
 log "Cron jobs installed."
 
-# ---- Step 10: Run initial sync ----
+# ---- Step 9: Run initial sync ----
 log "Running initial sync..."
 "${SCRIPT_DIR}/sync.sh" || true
 
@@ -223,12 +178,6 @@ echo "OneDrive folders:"
 echo "  Archive: My Files > ${ONEDRIVE_ARCHIVE}"
 echo "  Scan:    My Files > ${ONEDRIVE_SCAN}"
 echo "  Backups: My Files > ${ONEDRIVE_BACKUPS}"
-echo ""
-echo "Scanner (Canon ImageRunner 1133a):"
-echo "  FTP Host: $(hostname -I | awk '{print $1}')"
-echo "  FTP Port: 21"
-echo "  FTP User: ${FTP_USER}"
-echo "  FTP Dir:  /"
 echo ""
 echo "Sync runs every 5 minutes."
 echo "Backups run weekly (Sunday 2 AM) and upload to OneDrive."

@@ -1,32 +1,30 @@
-# Paperless NGX with OneDrive Sync and Scanner Integration
+# Paperless NGX with OneDrive Sync
 
-Adds OneDrive sync and Canon ImageRunner 1133a scanner support to a Paperless NGX instance running on Proxmox via the [community script](https://community-scripts.org/scripts/paperless-ngx).
+Adds OneDrive sync to a Paperless NGX instance running on Proxmox via the [community script](https://community-scripts.org/scripts/paperless-ngx).
 
 - Processed documents are synced to **OneDrive > My Files > Documents > Paperless > Archive**
 - Phone scans placed in **OneDrive > My Files > Documents > Paperless > Scan** are pulled into Paperless
-- Canon ImageRunner 1133a scans via FTP directly into Paperless
 - Weekly backups (database + config) are uploaded to **OneDrive > My Files > Documents > Paperless > Backups**
 - Full restore on a fresh LXC with one command
 
 ## Architecture
 
 ```
-Canon ImageRunner 1133a                   OneDrive Mobile App
-        |                                         |
-        | (FTP scan-to-folder)                    | (scan to Documents/Paperless/Scan)
-        v                                         v
-  +-----------+                            +-------------+
-  | vsftpd    |----> consume/ <----move----| rclone sync |
-  +-----------+         |                  +-------------+
-                        v                         ^
-               +----------------+                 |
-               | Paperless NGX  |                 |
-               | (OCR, rename,  |                 |
-               |  tag, organize)|                 |
-               +----------------+                 |
-                        |                         |
-                        v                         |
-                media/documents/           sync to OneDrive
+OneDrive Mobile App
+        |
+        | (scan to Documents/Paperless/Scan)
+        v
+  +-------------+
+  | rclone sync |----> consume/
+  +-------------+         |
+               +----------------+
+               | Paperless NGX  |
+               | (OCR, rename,  |
+               |  tag, organize)|
+               +----------------+
+                        |
+                        v
+                media/documents/
                    originals/ --------->  Documents/Paperless/Archive
 ```
 
@@ -34,7 +32,6 @@ Canon ImageRunner 1133a                   OneDrive Mobile App
 
 - Proxmox VE with a Paperless NGX LXC created via the [community script](https://community-scripts.org/scripts/paperless-ngx)
 - A Microsoft account with OneDrive
-- Network access to your Canon ImageRunner 1133a's admin panel
 
 ## Quick Start
 
@@ -51,7 +48,7 @@ cd /opt/paperless-sync
 ```bash
 cp .env.example .env
 nano .env
-# Set FTP_PASSWORD at minimum, review other settings
+# Review settings
 ```
 
 ### 3. Run the install script
@@ -65,7 +62,6 @@ This will:
 - Configure Paperless (`paperless.conf`) with OCR language, filename format, consumer settings, and reverse proxy URL
 - Install rclone and walk you through OneDrive authorization
 - Create the OneDrive folder structure (Documents/Paperless/Archive, Documents/Paperless/Scan, Documents/Paperless/Backups)
-- Install and configure vsftpd for the scanner
 - Set up cron jobs for sync (every 5 min) and backup (weekly)
 - Run an initial sync
 
@@ -75,33 +71,6 @@ Since the LXC has no browser, the install script will prompt you to:
 1. Run `rclone authorize "onedrive"` on your local machine (that has a browser)
 2. Complete the OAuth flow in the browser
 3. Copy the resulting token back into the LXC terminal
-
-## Scanner Setup: Canon ImageRunner 1133a
-
-The ImageRunner 1133a supports Scan-to-FTP. After running the install script, configure the printer:
-
-### On the printer's web interface (Remote UI)
-
-1. Open a browser and go to the printer's IP address
-2. Log in to the Remote UI as administrator
-3. Go to **Address Book** and add a new destination:
-   - **Type**: FTP
-   - **Host Name**: IP address of the Paperless LXC (shown at end of install script)
-   - **Port**: 21
-   - **User Name**: value of `FTP_USER` from your `.env` (default: `scanner`)
-   - **Password**: value of `FTP_PASSWORD` from your `.env`
-   - **Directory**: `/`
-   - **File Name**: use a prefix like `scan_` with auto-numbering
-4. Save the destination
-5. Test by scanning a document from the printer panel
-
-The scanned file lands in the Paperless consume folder, gets OCR'd, renamed, tagged, and then synced to OneDrive Archive.
-
-### Recommended scanner settings
-
-- **Color Mode**: Black & White or Grayscale (for text documents)
-- **Resolution**: 300 DPI
-- **File Format**: PDF (Compact) if available, otherwise standard PDF
 
 ## Scanning from Your Phone
 
@@ -135,7 +104,7 @@ My Files/
   .env                            # Configuration (from .env.example)
   paperless.conf.example          # Reference for Paperless settings
   scripts/
-    install.sh                    # One-time setup (OCR, config, rclone, vsftpd, cron)
+    install.sh                    # One-time setup (OCR, config, rclone, cron)
     sync.sh                       # OneDrive bidirectional sync
     backup.sh                     # Database + config backup to OneDrive
     restore.sh                    # Full restore from backup + OneDrive
@@ -143,7 +112,7 @@ My Files/
 
 /opt/paperless/             <-- Paperless application (community script)
 /opt/paperless_data/        <-- Paperless data (community script)
-  consume/                  # Incoming documents (FTP + OneDrive Scan)
+  consume/                  # Incoming documents (OneDrive Scan)
   media/documents/
     originals/              # Processed documents (synced to OneDrive Archive)
   data/                     # Paperless internal data
@@ -218,7 +187,7 @@ The restore script will:
 5. Stop Paperless, restore the PostgreSQL database
 6. Pull all documents from OneDrive Archive
 7. Start Paperless and rebuild the search index
-8. Run install.sh to set up cron jobs, vsftpd, and remaining configuration
+8. Run install.sh to set up cron jobs and remaining configuration
 
 ## Sync Behavior
 
@@ -320,20 +289,6 @@ tail -50 /var/log/paperless-sync.log
 
 # Verify rclone connection
 rclone lsd onedrive:Documents/
-```
-
-### Scanner not connecting
-
-```bash
-# Check vsftpd status
-systemctl status vsftpd
-
-# Check vsftpd logs
-journalctl -u vsftpd --no-pager -n 50
-
-# Test FTP locally
-apt-get install -y ftp
-ftp localhost 21
 ```
 
 ### Paperless not processing documents

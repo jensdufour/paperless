@@ -124,8 +124,8 @@ log "Rebuilding search index..."
 cd /opt/paperless/src
 /opt/paperless/.venv/bin/python3 manage.py document_index reindex
 
-# ---- Step 11: Set up cron jobs and vsftpd ----
-log "Running install script for cron jobs, vsftpd, and remaining config..."
+# ---- Step 11: Set up cron jobs ----
+log "Running install script for cron jobs and remaining config..."
 if [ -f "$SCRIPTS_TARGET/scripts/install.sh" ]; then
     bash "$SCRIPTS_TARGET/scripts/install.sh"
 fi
