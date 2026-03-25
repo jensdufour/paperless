@@ -46,7 +46,7 @@ set_paperless_conf() {
     local value="$2"
     # Remove any duplicate entries for this key first
     local count
-    count=$(grep -c "^${key}=" "$PAPERLESS_CONF" 2>/dev/null || echo 0)
+    count=$(grep -c "^${key}=" "$PAPERLESS_CONF" 2>/dev/null) || count=0
     if [ "$count" -gt 1 ]; then
         # Keep only the last occurrence, remove earlier ones
         sed -i "0,/^${key}=/{/^${key}=/d}" "$PAPERLESS_CONF"
