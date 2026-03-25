@@ -222,7 +222,7 @@ This sets Django's `CSRF_TRUSTED_ORIGINS` and `ALLOWED_HOSTS`, which fixes the "
 The default Paperless filename format can be set in the Paperless config (`/opt/paperless/paperless.conf`):
 
 ```
-PAPERLESS_FILENAME_FORMAT={created_year}/{correspondent}/{title}
+PAPERLESS_FILENAME_FORMAT={{ created_year }}/{{ correspondent }}/{{ title }}
 ```
 
 This creates:
