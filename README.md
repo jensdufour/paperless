@@ -138,20 +138,21 @@ My Files/
     restore.sh              # Restore from backup
   backups/                  # Local backup archives
 
-/opt/paperless/             <-- managed by the community script
+/opt/paperless/             <-- Paperless application (community script)
+/opt/paperless_data/        <-- Paperless data (community script)
   consume/                  # Incoming documents (FTP + OneDrive Scan)
   media/documents/
     originals/              # Processed documents (synced to OneDrive Archive)
   data/                     # Paperless internal data
-  export/                   # Document export (for backups)
+  trash/                    # Deleted documents
 ```
 
 ### Path mapping (LXC to OneDrive)
 
 | LXC Path | OneDrive Path | Direction |
 |---|---|---|
-| `/opt/paperless/consume/` | `Documents/Paperless/Scan` | OneDrive -> LXC |
-| `/opt/paperless/media/documents/originals/` | `Documents/Paperless/Archive` | LXC -> OneDrive |
+| `/opt/paperless_data/consume/` | `Documents/Paperless/Scan` | OneDrive -> LXC |
+| `/opt/paperless_data/media/documents/originals/` | `Documents/Paperless/Archive` | LXC -> OneDrive |
 | `/opt/paperless-sync/backups/` | `Documents/Paperless/Backups` | LXC -> OneDrive |
 
 ## Backup and Restore
@@ -272,7 +273,7 @@ ftp localhost 21
 
 ```bash
 # Check consume folder
-ls -la /opt/paperless/consume/
+ls -la /opt/paperless_data/consume/
 
 # Check Paperless logs
 journalctl -u paperless-consumer --no-pager -n 50

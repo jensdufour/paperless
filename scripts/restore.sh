@@ -71,7 +71,7 @@ systemctl stop paperless-webserver paperless-consumer paperless-scheduler 2>/dev
 log "Restoring PostgreSQL database..."
 if [ -f "$RESTORE_DIR/db_backup.dump" ]; then
     sudo -u postgres pg_restore \
-        -d paperless \
+        -d paperlessdb \
         --clean \
         --if-exists \
         "$RESTORE_DIR/db_backup.dump" || true
@@ -79,7 +79,7 @@ fi
 
 # ---- Step 7: Pull document files from OneDrive Archive ----
 log "Downloading documents from OneDrive Archive..."
-ORIGINALS_DIR="${PAPERLESS_MEDIA:-/opt/paperless/media}/documents/originals"
+ORIGINALS_DIR="${PAPERLESS_MEDIA:-/opt/paperless_data/media}/documents/originals"
 mkdir -p "$ORIGINALS_DIR"
 rclone copy \
     "${RCLONE_REMOTE:-onedrive}:${ONEDRIVE_ARCHIVE:-Documents/Paperless/Archive}" \
@@ -95,7 +95,7 @@ sleep 10
 
 log "Rebuilding search index..."
 cd /opt/paperless/src
-sudo -u paperless python3 manage.py document_index reindex
+/opt/paperless/.venv/bin/python3 manage.py document_index reindex
 
 # ---- Step 9: Cleanup ----
 rm -rf "$RESTORE_DIR"

@@ -37,7 +37,7 @@ mkdir -p "$BACKUP_DIR"
 
 # ---- Step 1: Dump PostgreSQL database ----
 log "Dumping PostgreSQL database..."
-sudo -u postgres pg_dump -Fc paperless > "${BACKUP_DIR}/db_backup.dump"
+sudo -u postgres pg_dump -Fc paperlessdb > "${BACKUP_DIR}/db_backup.dump"
 
 # ---- Step 2: Package backup ----
 log "Packaging backup..."
