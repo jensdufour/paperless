@@ -140,7 +140,19 @@ chmod 644 "$CRON_FILE"
 
 log "Cron jobs installed."
 
-# ---- Step 8: Run initial sync ----
+# ---- Step 8: Configure reverse proxy URL (if set) ----
+if [ -n "${PAPERLESS_URL:-}" ]; then
+    PAPERLESS_CONF="/opt/paperless/paperless.conf"
+    if grep -q "^PAPERLESS_URL=" "$PAPERLESS_CONF" 2>/dev/null; then
+        sed -i "s|^PAPERLESS_URL=.*|PAPERLESS_URL=${PAPERLESS_URL}|" "$PAPERLESS_CONF"
+    else
+        echo "PAPERLESS_URL=${PAPERLESS_URL}" >> "$PAPERLESS_CONF"
+    fi
+    log "Set PAPERLESS_URL=${PAPERLESS_URL} in paperless.conf"
+    systemctl restart paperless-web paperless-consumer paperless-scheduler 2>/dev/null || true
+fi
+
+# ---- Step 9: Run initial sync ----
 log "Running initial sync..."
 "${SCRIPT_DIR}/sync.sh" || true
 

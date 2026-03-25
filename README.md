@@ -197,6 +197,23 @@ Backups are uploaded to OneDrive and only the last 5 local copies are kept.
 
 The sync runs every 5 minutes via cron.
 
+## Reverse Proxy (Traefik / nginx)
+
+If you access Paperless through a reverse proxy, set `PAPERLESS_URL` in your `.env` before running the install script:
+
+```bash
+PAPERLESS_URL=https://paperless.yourdomain.com
+```
+
+The install script will write this to `paperless.conf`. If you already ran the install, add it manually:
+
+```bash
+echo 'PAPERLESS_URL=https://paperless.yourdomain.com' >> /opt/paperless/paperless.conf
+systemctl restart paperless-web paperless-consumer paperless-scheduler
+```
+
+This sets Django's `CSRF_TRUSTED_ORIGINS` and `ALLOWED_HOSTS`, which fixes the "CSRF verification failed" error.
+
 ## Paperless Configuration Tips
 
 ### Filename format
