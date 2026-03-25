@@ -150,11 +150,12 @@ My Files/
 
 ### Automated backup
 
-Backups run automatically every Sunday at 2 AM (configured during install). Each backup includes:
-- Paperless document export (metadata + originals)
-- PostgreSQL database dump
-- rclone configuration
+Backups run automatically every Sunday at 2 AM (configured during install). Each backup is lightweight and includes only what the sync does not cover:
+- PostgreSQL database dump (all metadata, tags, correspondents, matching rules, etc.)
+- rclone configuration (OneDrive auth token)
 - Scripts and `.env`
+
+Document files are NOT included in the backup since they are already on OneDrive Archive via the sync script. The restore script pulls them back from there.
 
 Backups are uploaded to OneDrive and only the last 5 local copies are kept.
 

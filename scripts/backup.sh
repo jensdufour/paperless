@@ -4,11 +4,13 @@ set -euo pipefail
 # =============================================================================
 # Paperless NGX Backup Script (Proxmox LXC)
 #
-# Creates a full backup that can be used to restore on a new machine:
-#   - Paperless document exporter (metadata + originals)
-#   - PostgreSQL database dump
-#   - rclone config
-#   - Uploads everything to OneDrive
+# Creates a lightweight backup containing only what the sync does NOT cover:
+#   - PostgreSQL database dump (metadata, tags, correspondents, rules, etc.)
+#   - rclone config (OneDrive auth)
+#   - Scripts and .env
+#
+# Document files are NOT included since they are already synced to OneDrive
+# Archive by the sync script. The restore script pulls them back from there.
 # =============================================================================
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -32,22 +34,14 @@ source "$ENV_FILE"
 set +a
 
 mkdir -p "$BACKUP_DIR"
-mkdir -p "${PAPERLESS_EXPORT}"
 
-# ---- Step 1: Run Paperless document exporter ----
-log "Running Paperless document exporter..."
-cd /opt/paperless/src
-sudo -u paperless python3 manage.py document_exporter "${PAPERLESS_EXPORT}" --no-progress-bar
-
-# ---- Step 2: Dump PostgreSQL database ----
+# ---- Step 1: Dump PostgreSQL database ----
 log "Dumping PostgreSQL database..."
 sudo -u postgres pg_dump -Fc paperless > "${BACKUP_DIR}/db_backup.dump"
 
-# ---- Step 3: Package backup ----
+# ---- Step 2: Package backup ----
 log "Packaging backup..."
 tar -czf "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" \
-    -C / \
-    "${PAPERLESS_EXPORT#/}" \
     -C "$PROJECT_DIR" \
     .env \
     scripts/ \
@@ -58,7 +52,7 @@ tar -czf "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" \
 
 rm -f "${BACKUP_DIR}/db_backup.dump"
 
-# ---- Step 4: Upload to OneDrive ----
+# ---- Step 3: Upload to OneDrive ----
 log "Uploading backup to OneDrive..."
 rclone copy \
     "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" \

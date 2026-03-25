@@ -4,7 +4,10 @@ set -euo pipefail
 # =============================================================================
 # Paperless NGX Restore Script (Proxmox LXC)
 #
-# Restores a full Paperless NGX installation from a backup archive.
+# Restores a Paperless NGX installation from a backup archive.
+# The backup contains only the database dump, config, and scripts.
+# Document files are pulled from OneDrive Archive (where sync put them).
+#
 # Run this inside a fresh Proxmox LXC created with the community script.
 #
 # Usage: ./scripts/restore.sh <path-to-backup.tar.gz>
@@ -45,11 +48,26 @@ if [ -f "$RESTORE_DIR/.env" ]; then
     set +a
 fi
 
-# ---- Step 3: Stop Paperless ----
+# ---- Step 3: Restore rclone config ----
+log "Restoring rclone configuration..."
+if [ -d "$RESTORE_DIR/.config/rclone" ]; then
+    mkdir -p /root/.config/rclone
+    cp "$RESTORE_DIR/.config/rclone/rclone.conf" /root/.config/rclone/ 2>/dev/null || true
+fi
+
+# ---- Step 4: Restore scripts and config ----
+log "Restoring scripts..."
+SCRIPTS_TARGET="/opt/paperless-sync"
+mkdir -p "$SCRIPTS_TARGET/scripts"
+cp "$RESTORE_DIR/.env" "$SCRIPTS_TARGET/" 2>/dev/null || true
+cp -r "$RESTORE_DIR/scripts/"* "$SCRIPTS_TARGET/scripts/" 2>/dev/null || true
+chmod +x "$SCRIPTS_TARGET/scripts/"*.sh
+
+# ---- Step 5: Stop Paperless ----
 log "Stopping Paperless service..."
 systemctl stop paperless-webserver paperless-consumer paperless-scheduler 2>/dev/null || true
 
-# ---- Step 4: Restore PostgreSQL database ----
+# ---- Step 6: Restore PostgreSQL database ----
 log "Restoring PostgreSQL database..."
 if [ -f "$RESTORE_DIR/db_backup.dump" ]; then
     sudo -u postgres pg_restore \
@@ -59,34 +77,25 @@ if [ -f "$RESTORE_DIR/db_backup.dump" ]; then
         "$RESTORE_DIR/db_backup.dump" || true
 fi
 
-# ---- Step 5: Restore document export ----
-log "Importing documents from export..."
-EXPORT_DIR="${PAPERLESS_EXPORT:-/opt/paperless/export}"
-if [ -d "$RESTORE_DIR/${EXPORT_DIR#/}" ]; then
-    cp -r "$RESTORE_DIR/${EXPORT_DIR#/}"/* "$EXPORT_DIR/" 2>/dev/null || true
-fi
+# ---- Step 7: Pull document files from OneDrive Archive ----
+log "Downloading documents from OneDrive Archive..."
+ORIGINALS_DIR="${PAPERLESS_MEDIA:-/opt/paperless/media}/documents/originals"
+mkdir -p "$ORIGINALS_DIR"
+rclone copy \
+    "${RCLONE_REMOTE:-onedrive}:${ONEDRIVE_ARCHIVE:-Documents/Paperless/Archive}" \
+    "$ORIGINALS_DIR" \
+    --log-level INFO \
+    --transfers 8
+chown -R paperless:paperless "$ORIGINALS_DIR"
 
-# ---- Step 6: Restore rclone config ----
-log "Restoring rclone configuration..."
-if [ -d "$RESTORE_DIR/.config/rclone" ]; then
-    mkdir -p /root/.config/rclone
-    cp "$RESTORE_DIR/.config/rclone/rclone.conf" /root/.config/rclone/ 2>/dev/null || true
-fi
-
-# ---- Step 7: Restore scripts and config ----
-log "Restoring scripts..."
-SCRIPTS_TARGET="/opt/paperless-sync"
-mkdir -p "$SCRIPTS_TARGET/scripts"
-cp "$RESTORE_DIR/.env" "$SCRIPTS_TARGET/" 2>/dev/null || true
-cp -r "$RESTORE_DIR/scripts/"* "$SCRIPTS_TARGET/scripts/" 2>/dev/null || true
-chmod +x "$SCRIPTS_TARGET/scripts/"*.sh
-
-# ---- Step 8: Import documents into Paperless ----
-log "Running Paperless document importer..."
+# ---- Step 8: Start Paperless and rebuild index ----
+log "Starting Paperless services..."
 systemctl start paperless-webserver paperless-consumer paperless-scheduler
 sleep 10
+
+log "Rebuilding search index..."
 cd /opt/paperless/src
-sudo -u paperless python3 manage.py document_importer "$EXPORT_DIR"
+sudo -u paperless python3 manage.py document_index reindex
 
 # ---- Step 9: Cleanup ----
 rm -rf "$RESTORE_DIR"
