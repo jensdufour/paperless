@@ -2,10 +2,10 @@
 
 Adds OneDrive sync and Canon ImageRunner 1133a scanner support to a Paperless NGX instance running on Proxmox via the [community script](https://community-scripts.org/scripts/paperless-ngx).
 
-- Processed documents are synced to **OneDrive > My Files > Documents > Archive**
-- Phone scans placed in **OneDrive > My Files > Documents > Scan** are pulled into Paperless
+- Processed documents are synced to **OneDrive > My Files > Documents > Paperless > Archive**
+- Phone scans placed in **OneDrive > My Files > Documents > Paperless > Scan** are pulled into Paperless
 - Canon ImageRunner 1133a scans via FTP directly into Paperless
-- Weekly backups are uploaded to **OneDrive > My Files > Documents > Backups**
+- Weekly backups are uploaded to **OneDrive > My Files > Documents > Paperless > Backups**
 - Full restore on a fresh LXC with one command
 
 ## Architecture
@@ -145,6 +145,14 @@ My Files/
   data/                     # Paperless internal data
   export/                   # Document export (for backups)
 ```
+
+### Path mapping (LXC to OneDrive)
+
+| LXC Path | OneDrive Path | Direction |
+|---|---|---|
+| `/opt/paperless/consume/` | `Documents/Paperless/Scan` | OneDrive -> LXC |
+| `/opt/paperless/media/documents/originals/` | `Documents/Paperless/Archive` | LXC -> OneDrive |
+| `/opt/paperless-sync/backups/` | `Documents/Paperless/Backups` | LXC -> OneDrive |
 
 ## Backup and Restore
 
