@@ -1,5 +1,5 @@
-#!/bin/bash
-set -euo pipefail
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
 # =============================================================================
 # Paperless NGX Sync Setup Script (Proxmox LXC)
@@ -81,8 +81,9 @@ log "Configuring Paperless (paperless.conf)..."
 set_paperless_conf "PAPERLESS_CONSUMPTION_DIR" "/opt/paperless_data/consume"
 set_paperless_conf "PAPERLESS_OCR_LANGUAGE" "$OCR_LANG"
 set_paperless_conf "PAPERLESS_CONSUMER_RECURSIVE" "true"
-set_paperless_conf "PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS" "true"
+set_paperless_conf "PAPERLESS_CONSUMER_SUBDIRS_AS_TAGS" "false"
 set_paperless_conf "PAPERLESS_CONSUMER_DELETE_DUPLICATES" "true"
+set_paperless_conf "PAPERLESS_ARCHIVE_FILE_GENERATION" "always"
 
 if [ -n "${PAPERLESS_FILENAME_FORMAT:-}" ]; then
     set_paperless_conf "PAPERLESS_FILENAME_FORMAT" "$PAPERLESS_FILENAME_FORMAT"
@@ -191,25 +192,24 @@ log "Created: ${ONEDRIVE_ARCHIVE}, ${ONEDRIVE_SCAN}, ${ONEDRIVE_BACKUPS}"
 chmod +x "${SCRIPT_DIR}/sync.sh"
 chmod +x "${SCRIPT_DIR}/backup.sh"
 chmod +x "${SCRIPT_DIR}/restore.sh"
+chmod +x "${SCRIPT_DIR}/verify-backup.sh"
 
 # ---- Step 9: Set up cron jobs ----
 log "Setting up cron jobs..."
 
 CRON_FILE="/etc/cron.d/paperless-sync"
-cat > "$CRON_FILE" << EOF
-# Sync with OneDrive every 5 minutes
-*/5 * * * * root ${SCRIPT_DIR}/sync.sh >> /var/log/paperless-sync.log 2>&1
-
-# Weekly backup every Sunday at 2 AM
-0 2 * * 0 root ${SCRIPT_DIR}/backup.sh >> /var/log/paperless-backup.log 2>&1
-EOF
-chmod 644 "$CRON_FILE"
+CRON_SOURCE="${PROJECT_DIR}/config/paperless-sync"
+if [[ ! -f "$CRON_SOURCE" ]]; then
+    echo "Error: cron source not found: $CRON_SOURCE"
+    exit 1
+fi
+install -m 0644 "$CRON_SOURCE" "$CRON_FILE"
 
 log "Cron jobs installed."
 
 # ---- Step 10: Run initial sync ----
 log "Running initial sync..."
-"${SCRIPT_DIR}/sync.sh" || true
+"${SCRIPT_DIR}/sync.sh" all || true
 
 # ---- Done ----
 echo ""
@@ -222,8 +222,8 @@ echo "  Archive: My Files > ${ONEDRIVE_ARCHIVE}"
 echo "  Scan:    My Files > ${ONEDRIVE_SCAN}"
 echo "  Backups: My Files > ${ONEDRIVE_BACKUPS}"
 echo ""
-echo "Sync runs every 5 minutes."
-echo "Backups run weekly (Sunday 2 AM) and upload to OneDrive."
+echo "Scan intake runs every 5 minutes; archive mirroring runs hourly."
+echo "Backups run weekly (Sunday 02:02), restore-test, and upload to OneDrive."
 echo ""
 echo "Logs:"
 echo "  Sync:   /var/log/paperless-sync.log"

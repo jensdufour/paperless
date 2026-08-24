@@ -1,3 +1,104 @@
+# Paperless-ngx with OneDrive Sync
+
+Adds bounded OneDrive intake, archive mirroring, and restore-tested official
+exports to a Paperless-ngx LXC created by the Proxmox community script.
+
+## Data Flow
+
+- `Documents/Paperless/Scan` is moved into Paperless consume every five minutes.
+- Paperless originals are mirrored to `Documents/Paperless/Archive` hourly.
+- A self-contained official export is created every Sunday at `02:02`, restored
+  into an isolated PostgreSQL/Redis/media environment, then mirrored to
+  `Documents/Paperless/Backups/official-export-v5`.
+- A separate encrypted/private configuration bundle accompanies each successful
+  export under the OneDrive backup root.
+
+All maintenance uses `/run/lock/paperless-maintenance.lock`. Scan/archive jobs
+skip when another maintenance job owns the lock. Backups wait up to five minutes
+and fail visibly rather than silently skipping.
+
+## Install
+
+Prerequisites:
+
+- A fresh Paperless-ngx LXC.
+- LXC nesting when Tika/Gotenberg containers are enabled.
+- A configured Microsoft OneDrive account.
+
+```bash
+git clone https://github.com/jensdufour/PUB-Paperless.git /opt/paperless-sync
+cd /opt/paperless-sync
+cp .env.example .env
+chmod 600 .env
+# Edit .env, then:
+bash scripts/install.sh
+```
+
+The installer configures OCR, Paperless policy, optional PocketID OIDC,
+Tika/Gotenberg, rclone, the tracked cron file, and an initial guarded sync.
+Secrets remain only in `.env`, Paperless configuration, and rclone state.
+
+## Scripts
+
+| Script | Purpose |
+| --- | --- |
+| `scripts/sync.sh [all|archive|scan]` | Guarded OneDrive mirror and intake |
+| `scripts/backup.sh` | Export, isolated restore proof, upload, and remote checksum check |
+| `scripts/verify-backup.sh <export>` | Temporary database/media restore canary |
+| `scripts/restore.sh <export> [config-bundle]` | Same-version restore into an empty Paperless database |
+| `scripts/install.sh` | Initial policy and schedule deployment |
+
+The archive mirror refuses an empty source and limits deletions to 50. The
+backup mirror limits deletions to 100. These guards deliberately turn unusual
+bulk changes into failures that require review.
+
+## Backup Acceptance
+
+A backup is successful only after all of these pass:
+
+1. Paperless services stop for a consistent official export.
+2. `manifest.json` and `backup-info.txt` are generated with the running version
+   and live object counts.
+3. The export imports into a temporary PostgreSQL database, Redis database, and
+   media tree.
+4. Search indexing, classifier generation, Django checks, count parity, and the
+   document sanity checker pass.
+5. Paperless services restart.
+6. The export and configuration bundle upload to OneDrive.
+7. `rclone check --one-way --checksum` reports zero differences.
+
+Do not use split manifests. Per-document JSON filenames are derived from date
+and title, so same-date/same-title documents can overwrite each other's metadata.
+
+## Restore
+
+Restore only into a fresh installation running the version recorded in
+`backup-info.txt`:
+
+```bash
+rclone copy \
+  onedrive:Documents/Paperless/Backups/official-export-v5 \
+  /tmp/official-export-v5
+
+bash /opt/paperless-sync/scripts/restore.sh \
+  /tmp/official-export-v5 \
+  /tmp/paperless-config-YYYYMMDD_HHMMSS.tar.gz
+```
+
+The restore rejects unsafe archive paths, version mismatches, incomplete
+exports, and non-empty target databases. It uses Paperless's supported importer
+and finishes with indexing, classifier generation, and a sanity check.
+
+## Schedule
+
+The canonical schedule is [`config/paperless-sync`](config/paperless-sync):
+
+- Scan intake: every five minutes.
+- Archive mirror: hourly at minute `17`.
+- Official export: Sunday at `02:02`.
+
+The two-minute offset prevents the backup from colliding with the `02:00` scan
+job; the lock wait remains the final concurrency guard.
 # Paperless NGX with OneDrive Sync
 
 Adds OneDrive sync to a Paperless NGX instance running on Proxmox via the [community script](https://community-scripts.org/scripts/paperless-ngx).

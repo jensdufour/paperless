@@ -1,3 +1,99 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+    echo "Usage: $0 <official-export-directory> [config-bundle.tar.gz]"
+    echo "The target must be a fresh Paperless installation on the same version."
+    exit 1
+fi
+
+if [[ $(id -u) -ne 0 ]]; then
+    echo "Error: this script must run as root."
+    exit 1
+fi
+
+EXPORT_DIR="$(realpath "$1")"
+CONFIG_BUNDLE="${2:-}"
+INFO_FILE="${EXPORT_DIR}/backup-info.txt"
+UV=/usr/local/bin/uv
+SERVICES=(paperless-consumer paperless-task-queue paperless-scheduler paperless-webserver)
+services_stopped=0
+
+if [[ ! -s "${EXPORT_DIR}/manifest.json" || ! -s "$INFO_FILE" ]]; then
+    echo "Error: source is not a complete official Paperless export."
+    exit 1
+fi
+
+start_services() {
+    if ((services_stopped)); then
+        systemctl start "${SERVICES[@]}"
+    fi
+}
+trap start_services EXIT
+
+backup_version=$(sed -n 's/^paperless_version=//p' "$INFO_FILE")
+installed_version=$(
+    cd /opt/paperless/src
+    PAPERLESS_CONFIGURATION_PATH=/opt/paperless/paperless.conf \
+        DJANGO_SETTINGS_MODULE=paperless.settings \
+        "$UV" run manage.py version
+)
+if [[ "$backup_version" != "$installed_version" ]]; then
+    echo "Error: backup version $backup_version does not match installed version $installed_version."
+    exit 1
+fi
+
+if [[ -n "$CONFIG_BUNDLE" ]]; then
+    if [[ ! -f "$CONFIG_BUNDLE" ]]; then
+        echo "Error: config bundle not found: $CONFIG_BUNDLE"
+        exit 1
+    fi
+    if tar -tzf "$CONFIG_BUNDLE" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+        echo "Error: unsafe path in config bundle."
+        exit 1
+    fi
+    tar -xzf "$CONFIG_BUNDLE" -C /
+    chmod 600 \
+        /opt/paperless/paperless.conf \
+        /opt/paperless-sync/.env \
+        /root/paperless-ngx.creds \
+        /root/.config/rclone/rclone.conf
+    systemctl daemon-reload
+fi
+
+cd /opt/paperless/src
+export PAPERLESS_CONFIGURATION_PATH=/opt/paperless/paperless.conf
+export DJANGO_SETTINGS_MODULE=paperless.settings
+existing_documents=$("$UV" run python - <<'PY'
+import django
+
+django.setup()
+
+from documents.models import Document
+
+print(Document.global_objects.count())
+PY
+)
+if [[ "$existing_documents" != 0 ]]; then
+    echo "Error: restore requires an empty Paperless database; found $existing_documents documents."
+    exit 1
+fi
+
+systemctl stop "${SERVICES[@]}"
+services_stopped=1
+
+"$UV" run manage.py migrate --noinput
+"$UV" run manage.py document_importer "$EXPORT_DIR" --no-progress-bar
+"$UV" run manage.py document_index reindex --if-needed
+"$UV" run manage.py document_create_classifier
+chmod 640 /opt/paperless_data/data/classification_model.pickle
+
+start_services
+services_stopped=0
+trap - EXIT
+
+"$UV" run manage.py document_sanity_checker
+echo "Restore complete and sanity-checked."
 #!/bin/bash
 set -euo pipefail
 

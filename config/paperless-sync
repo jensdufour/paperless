@@ -1,0 +1,8 @@
+# Pull phone scans every five minutes.
+*/5 * * * * root /opt/paperless-sync/scripts/sync.sh scan >> /var/log/paperless-sync.log 2>&1
+
+# Mirror processed originals hourly; the official export below is the recovery backup.
+17 * * * * root /opt/paperless-sync/scripts/sync.sh archive >> /var/log/paperless-sync.log 2>&1
+
+# Create, restore-test, and upload the official export every Sunday at 02:02.
+2 2 * * 0 root /opt/paperless-sync/scripts/backup.sh >> /var/log/paperless-backup.log 2>&1
